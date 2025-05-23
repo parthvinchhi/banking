@@ -1,92 +1,45 @@
 package domain
 
 import (
-	"database/sql"
-	"log"
-	"time"
-
-	_ "github.com/go-sql-driver/mysql"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 type CustomerRepositoryDB struct {
-	client *sql.DB
+	client *gorm.DB
 }
 
-// func Connect() (*CustomerRepositoryDB, error) {
-// 	dsn := "root:123@tcp(localhost:3306)/banking?parseTime=true"
-// 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &CustomerRepositoryDB{client: db}, nil
-// }
-
-func (db CustomerRepositoryDB) FindAll(status string) ([]Customer, error) {
-	client, err := sql.Open("mysql", "root:123@tcp(localhost:3306)/banking")
+func NewCustomerRepositoryDB() *CustomerRepositoryDB {
+	dsn := "root:123@tcp(localhost:3306)/banking?parseTime=false"
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic(err)
+		return nil
 	}
 
-	client.SetConnMaxLifetime(3 * time.Minute)
-	client.SetMaxOpenConns(10)
-	client.SetMaxIdleConns(10)
+	return &CustomerRepositoryDB{client: db}
+}
 
-	var rows *sql.Rows
-	// var err error
+func (r CustomerRepositoryDB) FindAll(status string) ([]Customer, error) {
+	var customers []Customer
+	var result *gorm.DB
 
 	if status == "" {
-		findAllSql := "select customer_id, name, city, zipcode, date_of_birth, status from customers"
-		rows, err = client.Query(findAllSql)
+		result = r.client.Find(&customers)
 	} else {
-		findAllSql := "select customer_id, name, city, zipcode, date_of_birth, status from customers where status = ?"
-		rows, err = client.Query(findAllSql, status)
+		result = r.client.Where("status = ?", status).Find(&customers)
 	}
 
-	if err != nil {
-		log.Println(err)
-		return nil, err
+	if result.Error != nil {
+		return nil, result.Error
 	}
-
-	customers := make([]Customer, 0)
-
-	for rows.Next() {
-		var cust Customer
-		if err := rows.Scan(&cust.ID, &cust.Name, &cust.City, &cust.Zipcode, &cust.DOB, &cust.Status); err != nil {
-			log.Println(err)
-			return nil, err
-		}
-
-		customers = append(customers, cust)
-	}
-
 	return customers, nil
 }
 
-func NewCustomerRepositoryDB() CustomerRepositoryDB {
-	client, err := sql.Open("mysql", "root:123@tcp(localhost:3306)/banking")
-	if err != nil {
-		panic(err)
+func (r CustomerRepositoryDB) ByID(id string) (*Customer, error) {
+	var customer Customer
+	result := r.client.First(&customer, "customer_id = ?", id)
+	if result.Error != nil {
+		return nil, result.Error
 	}
-
-	client.SetConnMaxLifetime(3 * time.Minute)
-	client.SetMaxOpenConns(10)
-	client.SetMaxIdleConns(10)
-
-	return CustomerRepositoryDB{
-		client: client,
-	}
-}
-
-func (db CustomerRepositoryDB) ByID(id string) (*Customer, error) {
-	customerSql := "select customer_id, name, city, zipcode, date_of_birth, status from customers where customer_id = ?"
-
-	row := db.client.QueryRow(customerSql, id)
-	var cust Customer
-
-	if err := row.Scan(&cust.ID, &cust.Name, &cust.City, &cust.Zipcode, &cust.DOB, &cust.Status); err != nil {
-		return nil, err
-	}
-
-	return &cust, nil
+	return &customer, nil
 }
